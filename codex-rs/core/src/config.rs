@@ -1,6 +1,7 @@
 use crate::config_profile::ConfigProfile;
 use crate::config_types::History;
 use crate::config_types::McpServerConfig;
+use crate::config_types::McpServerPreset;
 use crate::config_types::Tui;
 use crate::config_types::UriBasedFileOpener;
 use crate::flags::OPENAI_DEFAULT_MODEL;
@@ -94,6 +95,7 @@ pub struct Config {
 
     /// Collection of settings that are specific to the TUI.
     pub tui: Tui,
+    pub mcp_server_presets: Vec<McpServerPreset>,
 }
 
 /// Base config deserialized from ~/.codex/config.toml.
@@ -154,6 +156,10 @@ pub struct ConfigToml {
 
     /// Collection of settings that are specific to the TUI.
     pub tui: Option<Tui>,
+
+    /// User-defined MCP server presets.
+    #[serde(default)]
+    pub mcp_server_presets: Option<Vec<McpServerPreset>>,
 }
 
 impl ConfigToml {
@@ -349,6 +355,7 @@ impl Config {
             history,
             file_opener: cfg.file_opener.unwrap_or(UriBasedFileOpener::VsCode),
             tui: cfg.tui.unwrap_or_default(),
+            mcp_server_presets: cfg.mcp_server_presets.unwrap_or_default(),
         };
         Ok(config)
     }
@@ -688,6 +695,7 @@ disable_response_storage = true
                 history: History::default(),
                 file_opener: UriBasedFileOpener::VsCode,
                 tui: Tui::default(),
+                mcp_server_presets: vec![],
             },
             o3_profile_config
         );
@@ -777,6 +785,8 @@ disable_response_storage = true
             history: History::default(),
             file_opener: UriBasedFileOpener::VsCode,
             tui: Tui::default(),
+                mcp_server_presets: vec![],
+                mcp_server_presets: vec![],
         };
 
         assert_eq!(expected_zdr_profile_config, zdr_profile_config);

@@ -32,10 +32,13 @@ import {
 import { applyPatchToolInstructions } from "./apply-patch.js";
 import { handleExecCommand } from "./handle-exec-command.js";
 import { HttpsProxyAgent } from "https-proxy-agent";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFile } from "node:child_process"; // Added execFile
 import { randomUUID } from "node:crypto";
 import OpenAI, { APIConnectionTimeoutError, AzureOpenAI } from "openai";
 import os from "os";
+import { promisify } from "util"; // Added promisify
+
+const execFileAsync = promisify(execFile); // Promisified execFile
 
 // Wait time before retrying after rate limit errors (ms).
 const RATE_LIMIT_RETRY_WAIT_MS = parseInt(
@@ -621,6 +624,26 @@ export class AgentLoop {
       if (this.model.startsWith("codex")) {
         tools = [localShellTool];
       }
+
+      // Fetch and parse active MCP presets
+      const activeMcpPresets = await fetchAndParseActiveMcpPresets();
+      const mcpToolsFromPresets: Tool[] = activeMcpPresets.map((preset) => ({
+        type: "mcp",
+        server_label: preset.label,
+        server_url: preset.url,
+      } as Tool)); // Cast to Tool to satisfy TypeScript if MCPTool type isn't defined yet
+
+      tools.push(...mcpToolsFromPresets);
+
+      // TODO: Add internal codex-rs MCP server if active and its details are known
+      // const internalMcpServer = getInternalMcpServerDetails(); // This function would need to be implemented
+      // if (internalMcpServer && internalMcpServer.is_active) {
+      //   tools.push({
+      //     type: "mcp",
+      //     server_label: internalMcpServer.label, // e.g., "codex_internal"
+      //     server_url: internalMcpServer.url     // e.g., "http://localhost:PORT"
+      //   } as Tool);
+      // }
 
       const stripInternalFields = (
         item: ResponseInputItem,
@@ -1669,4 +1692,91 @@ function filterToApiMessages(
     }
     return true;
   });
+}
+
+async function fetchAndParseActiveMcpPresets(): Promise<
+  Array<{ label: string; url: string }>
+> {
+  const codexRsCliPath = process.env.CODEX_RS_CLI_PATH || "codex-rs-cli";
+  try {
+    const { stdout } = await execFileAsync(codexRsCliPath, [
+      "config",
+      "mcp",
+      "list",
+    ]);
+
+    if (!stdout) {
+      log.info("No MCP presets found or stdout is empty.");
+      return [];
+    }
+
+    const lines = stdout.trim().split("\n");
+    if (lines.length < 3) {
+      // Not enough lines for header, separator, and data
+      log.info("MCP preset list output too short to parse.");
+      return [];
+    }
+
+    // Find column indices - robust to slight variations in spacing
+    const headerLine = lines[0];
+    const labelColName = "Label";
+    const urlColName = "URL";
+    const statusColName = "Status";
+
+    const labelIndex = headerLine.indexOf(labelColName);
+    const urlIndex = headerLine.indexOf(urlColName);
+    const statusIndex = headerLine.indexOf(statusColName);
+
+    if (labelIndex === -1 || urlIndex === -1 || statusIndex === -1) {
+      log.warn(
+        `MCP preset list headers ('${labelColName}', '${urlColName}', '${statusColName}') not found in output: "${headerLine}". Cannot parse.`,
+      );
+      return [];
+    }
+
+    // Estimate column boundaries for parsing based on header positions
+    // This is a bit heuristic but should work for typical fixed-width-ish output
+    // The end of a column is the start of the next, or end of line for the last column.
+    const columnBoundaries = [
+        { start: labelIndex, end: urlIndex },
+        { start: urlIndex, end: statusIndex },
+        { start: statusIndex, end: headerLine.length } // Status is the last column
+    ].sort((a,b) => a.start - b.start); // Ensure sorted by start index for correct parsing
+
+
+    const activePresets: Array<{ label: string; url: string }> = [];
+    // Start from line 2 to skip header and separator
+    for (let i = 2; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue; // Skip empty lines
+
+      // Extract based on determined column boundaries relative to each other
+      // This assumes fixed-width columns based on header positions
+      const label = line.substring(columnBoundaries[0].start, columnBoundaries[0].end).trim();
+      const url = line.substring(columnBoundaries[1].start, columnBoundaries[1].end).trim();
+      const status = line.substring(columnBoundaries[2].start, columnBoundaries[2].end).trim();
+      
+      if (status.toLowerCase() === "enabled") {
+        if (label && url) { // Ensure label and url are not empty
+          activePresets.push({ label, url });
+        } else {
+          log.warn(`Parsed empty label or URL from MCP preset line: "${line}"`);
+        }
+      }
+    }
+    if (activePresets.length > 0) {
+      log.info(`Found active MCP presets: ${JSON.stringify(activePresets)}`);
+    } else {
+      log.info("No active MCP presets found after parsing.");
+    }
+    return activePresets;
+  } catch (error: any) {
+    log.error(
+      `Error fetching or parsing MCP presets: ${error.message || String(error)}`,
+    );
+    if (error.stderr) {
+      log.error(`MCP presets CLI stderr: ${error.stderr}`);
+    }
+    return []; // Return empty on error
+  }
 }

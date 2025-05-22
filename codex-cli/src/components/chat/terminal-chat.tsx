@@ -38,9 +38,12 @@ import SessionsOverlay from "../sessions-overlay.js";
 import chalk from "chalk";
 import fs from "fs/promises";
 import { Box, Text } from "ink";
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { inspect } from "util";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 export type OverlayModeType =
   | "none"
@@ -154,6 +157,7 @@ export default function TerminalChat({
     initialApprovalPolicy,
   );
   const [thinkingSeconds, setThinkingSeconds] = useState(0);
+  const [mcpCommandOutput, setMcpCommandOutput] = useState<string | null>(null);
 
   const handleCompact = async () => {
     setLoading(true);
@@ -460,6 +464,22 @@ export default function TerminalChat({
     [items, model],
   );
 
+  const executeMcpCommand = async (
+    mcpArgs: string[],
+  ): Promise<{ stdout: string; stderr: string; error?: Error }> => {
+    const codexRsCliPath = process.env.CODEX_RS_CLI_PATH || "codex-rs-cli"; // Allow overriding for tests/dev
+    try {
+      const { stdout, stderr } = await execFileAsync(codexRsCliPath, [
+        "config",
+        "mcp",
+        ...mcpArgs,
+      ]);
+      return { stdout, stderr };
+    } catch (error: any) {
+      return { stdout: "", stderr: error.stderr || "", error };
+    }
+  };
+
   if (viewRollout) {
     return (
       <TerminalChatPastRollout
@@ -497,6 +517,8 @@ export default function TerminalChat({
               flexModeEnabled: Boolean(config.flexMode),
             }}
             fileOpener={config.fileOpener}
+            mcpCommandOutput={mcpCommandOutput} // Pass output to display
+            clearMcpCommandOutput={() => setMcpCommandOutput(null)} // Allow clearing
           />
         ) : (
           <Box>
@@ -574,8 +596,162 @@ export default function TerminalChat({
                 },
               ]);
             }}
-            submitInput={(inputs) => {
-              agent.run(inputs, lastResponseId || "");
+            submitInput={async (inputs) => {
+              const commandText =
+                typeof inputs === "string"
+                  ? inputs
+                  : inputs[0]?.content?.[0]?.text || ""; // Assuming InputItem structure
+
+              if (commandText.startsWith("/mcp")) {
+                const parts = commandText.trim().split(/\s+/);
+                const mcpSubCommand = parts[1];
+                let outputMessage = "";
+                let isError = false;
+
+                setLoading(true);
+                setMcpCommandOutput(null); // Clear previous output
+
+                try {
+                  switch (mcpSubCommand) {
+                    case "list": {
+                      const { stdout, stderr, error } = await executeMcpCommand(
+                        ["list"],
+                      );
+                      if (error || stderr) {
+                        outputMessage = `Error listing MCP presets: ${
+                          stderr || (error as Error)?.message
+                        }`;
+                        isError = true;
+                      } else {
+                        outputMessage = stdout
+                          ? `MCP Presets:\n${stdout}`
+                          : "No MCP presets configured.";
+                      }
+                      break;
+                    }
+                    case "add": {
+                      const label = parts[2];
+                      const url = parts[3];
+                      if (!label || !url) {
+                        outputMessage =
+                          "Usage: /mcp add <label> <url>";
+                        isError = true;
+                      } else {
+                        const { stdout, stderr, error } =
+                          await executeMcpCommand([
+                            "add",
+                            "--label",
+                            label,
+                            "--url",
+                            url,
+                          ]);
+                        if (error || stderr) {
+                          outputMessage = `Error adding MCP preset '${label}': ${
+                            stderr || (error as Error)?.message
+                          }`;
+                          isError = true;
+                        } else {
+                          outputMessage =
+                            stdout || `MCP preset '${label}' added/updated.`;
+                        }
+                      }
+                      break;
+                    }
+                    case "remove": {
+                      const label = parts[2];
+                      if (!label) {
+                        outputMessage = "Usage: /mcp remove <label>";
+                        isError = true;
+                      } else {
+                        const { stdout, stderr, error } =
+                          await executeMcpCommand(["remove", "--label", label]);
+                        if (error || stderr) {
+                          outputMessage = `Error removing MCP preset '${label}': ${
+                            stderr || (error as Error)?.message
+                          }`;
+                          isError = true;
+                        } else {
+                          outputMessage =
+                            stdout || `MCP preset '${label}' removed.`;
+                        }
+                      }
+                      break;
+                    }
+                    case "enable": {
+                      const label = parts[2];
+                      if (!label) {
+                        outputMessage = "Usage: /mcp enable <label>";
+                        isError = true;
+                      } else {
+                        const { stdout, stderr, error } =
+                          await executeMcpCommand(["enable", "--label", label]);
+                        if (error || stderr) {
+                          outputMessage = `Error enabling MCP preset '${label}': ${
+                            stderr || (error as Error)?.message
+                          }`;
+                          isError = true;
+                        } else {
+                          outputMessage =
+                            stdout || `MCP preset '${label}' enabled.`;
+                        }
+                      }
+                      break;
+                    }
+                    case "disable": {
+                      const label = parts[2];
+                      if (!label) {
+                        outputMessage = "Usage: /mcp disable <label>";
+                        isError = true;
+                      } else {
+                        const { stdout, stderr, error } =
+                          await executeMcpCommand([
+                            "disable",
+                            "--label",
+                            label,
+                          ]);
+                        if (error || stderr) {
+                          outputMessage = `Error disabling MCP preset '${label}': ${
+                            stderr || (error as Error)?.message
+                          }`;
+                          isError = true;
+                        } else {
+                          outputMessage =
+                            stdout || `MCP preset '${label}' disabled.`;
+                        }
+                      }
+                      break;
+                    }
+                    case "help":
+                      outputMessage = `MCP Server Preset Commands:
+/mcp list                         Lists all configured MCP server presets.
+/mcp add <label> <url>            Adds or updates an MCP server preset.
+                                  Example: /mcp add myapi http://localhost:8080/mcp
+/mcp remove <label>               Removes an MCP server preset.
+/mcp enable <label>               Enables an MCP server preset.
+/mcp disable <label>              Disables an MCP server preset.
+/mcp help                         Shows this help message.`;
+                      break;
+                    default:
+                      outputMessage = `Unknown /mcp command: ${mcpSubCommand}. Try /mcp help.`;
+                      isError = true;
+                  }
+                } catch (e: any) {
+                  outputMessage = `Failed to execute /mcp command: ${e.message}`;
+                  isError = true;
+                } finally {
+                  setLoading(false);
+                  setMcpCommandOutput(outputMessage);
+                  // The output will be displayed by TerminalMessageHistory
+                }
+                return {}; // Indicate command was handled
+              }
+
+              // Default behavior for non-/mcp commands
+              if (typeof inputs === "string") {
+                 agent.run([await createInputItem(inputs, [])], lastResponseId || "");
+              } else {
+                agent.run(inputs, lastResponseId || "");
+              }
               return {};
             }}
             items={items}

@@ -25,6 +25,8 @@ type TerminalMessageHistoryProps = {
   fullStdout: boolean;
   setOverlayMode: React.Dispatch<React.SetStateAction<OverlayModeType>>;
   fileOpener: FileOpenerScheme | undefined;
+  mcpCommandOutput?: string | null;
+  clearMcpCommandOutput?: () => void;
 };
 
 const TerminalMessageHistory: React.FC<TerminalMessageHistoryProps> = ({
@@ -36,12 +38,28 @@ const TerminalMessageHistory: React.FC<TerminalMessageHistoryProps> = ({
   fullStdout,
   setOverlayMode,
   fileOpener,
+  mcpCommandOutput,
+  clearMcpCommandOutput,
 }) => {
   // Flatten batch entries to response items.
   const messages = useMemo(() => batch.map(({ item }) => item!), [batch]);
 
+  // Effect to clear MCP command output after it's been rendered once
+  React.useEffect(() => {
+    if (mcpCommandOutput && clearMcpCommandOutput) {
+      clearMcpCommandOutput();
+    }
+  }, [mcpCommandOutput, clearMcpCommandOutput]);
+
   return (
     <Box flexDirection="column">
+      {/* Render MCP Command Output if available */}
+      {mcpCommandOutput && (
+        <Box flexDirection="column" marginY={1}>
+          <Text dimColor>MCP Command Output:</Text>
+          <Text>{mcpCommandOutput}</Text>
+        </Box>
+      )}
       {/* The dedicated thinking indicator in the input area now displays the
           elapsed time, so we no longer render a separate counter here. */}
       <Static items={["header", ...messages]}>

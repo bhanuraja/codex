@@ -33,4 +33,29 @@ export const SLASH_COMMANDS: Array<SlashCommand> = [
     description:
       "Show git diff of the working directory (or applied patches if not in git)",
   },
+  {
+    command: "/mcp list",
+    description: "Lists all configured MCP server presets.",
+  },
+  {
+    command: "/mcp add <label> <url>",
+    description:
+      "Adds or updates an MCP server preset (e.g., /mcp add myapi http://localhost:8080/mcp).",
+  },
+  {
+    command: "/mcp remove <label>",
+    description: "Removes an MCP server preset.",
+  },
+  {
+    command: "/mcp enable <label>",
+    description: "Enables an MCP server preset to be used in OpenAI calls.",
+  },
+  {
+    command: "/mcp disable <label>",
+    description: "Disables an MCP server preset.",
+  },
+  {
+    command: "/mcp help",
+    description: "Shows help for MCP server preset commands.",
+  },
 ];

@@ -86,3 +86,15 @@ pub struct Tui {
     /// using the mouse without needing to hold down a modifier key.
     pub disable_mouse_capture: bool,
 }
+
+#[derive(Deserialize, Debug, Clone, PartialEq, serde::Serialize)]
+pub struct McpServerPreset {
+    pub label: String,
+    pub url: String,
+    #[serde(default = "default_enabled_status")]
+    pub is_enabled: bool,
+}
+
+fn default_enabled_status() -> bool {
+    true
+}

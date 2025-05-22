@@ -63,8 +63,9 @@ The `run` method in `AgentLoop` is responsible for constructing and sending requ
 -   `instructions`: The system prompt, combined with the `prefix`.
 -   `input`: An array of messages representing the conversation history, including the latest user prompt.
 -   `tools`: An array of tool definitions available to the model. This includes:
-    -   `shellFunctionTool`: A tool for executing shell commands.
-    -   `localShellTool`: Another tool potentially for local shell execution, differentiated by its handling.
+    -   `shellFunctionTool`: A standard tool for executing shell commands.
+    -   `localShellTool`: Another tool potentially for local shell execution, differentiated by its handling (typically for `codex` models).
+    -   **MCP Tools**: Dynamically added based on active MCP server presets configured by the user. These tools have `type: "mcp"` and include `server_label` and `server_url` fields, pointing to external MCP-compliant servers. The `AgentLoop` fetches active presets via `codex-rs-cli config mcp list` and constructs these tool entries.
 -   `tool_choice`: Configured as "auto", allowing the model to decide when to use a tool.
 -   `stream`: Set to `true`, indicating that responses should be streamed.
 -   `store`: This parameter is implicitly managed. If `disableResponseStorage` is `false` (the default), OpenAI is expected to store the response, and a `previous_response_id` is sent with subsequent requests to maintain context. If `disableResponseStorage` is `true`, this mechanism is bypassed.
@@ -149,7 +150,7 @@ This section details the `openai` npm package (version 4.x or higher, as used by
         -   `instructions` (string): The system-level instructions that guide the model's behavior. In `codex-cli`, this is combined with a predefined `prefix`.
         -   `input` (array of `ResponseInputItem`): Represents the conversation history and the latest user prompt. Each item can be text, image, audio, etc.
         -   `stream` (boolean): When `true` (as used in `codex-cli`), the API streams back partial progress via Server-Sent Events.
-        -   `tools` (array of `Tool`): Defines any tools the model can use, such as functions for shell execution (`shellFunctionTool`, `localShellTool` in `codex-cli`).
+        -   `tools` (array of `Tool`): Defines any tools the model can use. This includes standard tools like `shellFunctionTool`, `localShellTool`, and dynamically added **MCP Tools** (see above).
         -   `tool_choice` (string or object): Controls how the model selects tools. `codex-cli` uses "auto" to let the model decide.
         -   `store` (boolean, default `false`): If `true`, OpenAI will store the response for use in subsequent turns. `codex-cli` manages this via `disableResponseStorage` which, if `false`, implies `store` is effectively enabled, and `previous_response_id` is used to link conversation turns. If `disableResponseStorage` is `true`, then `store` is not used and `previous_response_id` is not sent.
         -   `previous_response_id` (string, optional): The ID of the previous response, used to maintain conversation context if `store` was used for that previous response.
@@ -159,7 +160,7 @@ This section details the `openai` npm package (version 4.x or higher, as used by
         -   `model` (string): Specifies the deployment ID of the model on Azure.
         -   `messages` (array of `ChatCompletionMessageParam`): An array of message objects representing the conversation history. This typically includes messages with roles like `system`, `user`, and `assistant`, replacing the separate `instructions` and `input` fields of the `responses.create` API.
         -   `stream` (boolean): Also set to `true` in `codex-cli` for streaming responses.
-        -   `tools` (array of `ChatCompletionTool`): Similar to the `responses` API, defines tools available to the model.
+        -   `tools` (array of `ChatCompletionTool`): Similar to the `responses` API, defines tools available to the model, including standard and **MCP Tools**.
         -   `tool_choice` (string or object): Similar to the `responses` API, controls tool selection.
 
 ### Streaming:
@@ -171,7 +172,7 @@ This section details the `openai` npm package (version 4.x or higher, as used by
 
 -   The `api.md` file, included with the `openai` package, provides an extensive list of TypeScript types for all request parameters, response payloads, and nested objects. Examples relevant to `codex-cli` include:
     -   `Response`, `ResponseInputItem`, `ResponseOutputItem`
-    -   `Tool`, `FunctionTool`, `ComputerTool`
+    -   `Tool`, `FunctionTool`, `ComputerTool`, and potentially custom types for MCP tools if defined (though often they are generic objects with a `type: "mcp"` field).
     -   `ResponseStreamEvent` and its various subtypes (e.g., `ResponseTextDeltaEvent`, `ResponseOutputItemDoneEvent`)
     -   `ChatCompletion`, `ChatCompletionMessageParam`, `ChatCompletionTool`
 -   `codex-cli` leverages these TypeScript types extensively to ensure type safety, facilitate development with auto-completion, and maintain robust interactions with the OpenAI API.
