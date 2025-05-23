@@ -1771,11 +1771,11 @@ async function fetchAndParseActiveMcpPresets(): Promise<
     }
     return activePresets;
   } catch (error: any) {
-    log.error(
-      `Error fetching or parsing MCP presets: ${error.message || String(error)}`,
+    log(
+      `ERROR: Error fetching or parsing MCP presets: ${error.message || String(error)}`,
     );
     if (error.stderr) {
-      log.error(`MCP presets CLI stderr: ${error.stderr}`);
+      log(`ERROR: MCP presets CLI stderr: ${error.stderr}`);
     }
     return []; // Return empty on error
   }

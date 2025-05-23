@@ -310,10 +310,19 @@ export default function TerminalChatInput({
                   onSubmit(cmd);
                   break;
                 default:
+                  // If it's an /mcp command, it should be handled by the main onSubmit
+                  if (cmd.startsWith("/mcp")) {
+                    onSubmit(cmd);
+                  }
+                  // Otherwise, it's an unknown slash command from the suggestions
+                  // that isn't explicitly handled here, do nothing or show error.
+                  // For now, letting it fall through might be okay if onSubmit can handle it,
+                  // but ideally, all SLASH_COMMANDS entries should have explicit handling
+                  // or a clear path.
                   break;
               }
             }
-            return;
+            return; // This return is important, ensures it doesn't fall through to other handlers
           }
         }
       }

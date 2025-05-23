@@ -601,8 +601,12 @@ export default function TerminalChat({
                 typeof inputs === "string"
                   ? inputs
                   : inputs[0]?.content?.[0]?.text || ""; // Assuming InputItem structure
+              
+              log.log(`TerminalChat.submitInput: received commandText = "${commandText}"`);
+              const isMcpCommand = commandText.startsWith("/mcp");
+              log.log(`TerminalChat.submitInput: isMcpCommand = ${isMcpCommand}`);
 
-              if (commandText.startsWith("/mcp")) {
+              if (isMcpCommand) {
                 const parts = commandText.trim().split(/\s+/);
                 const mcpSubCommand = parts[1];
                 let outputMessage = "";
